@@ -1,5 +1,5 @@
+import mitt from "mitt";
 import { processExpression } from "./process-expression.js";
-import { EventEmitter } from "events";
 
 const parseInput = (line = "") => {
   const [command, ...args] = line
@@ -82,6 +82,198 @@ const describeInventory = (game) => {
   return message;
 };
 
+export class Engine {
+  /**
+   * @type {import('readline').Interface}
+   */
+  #inputManager;
+
+  /**
+   * @type {import("./game.type").Game}
+   */
+  #game;
+
+  #emitter = mitt();
+
+  /**
+   * Create new Engine
+   * @param {Object} args
+   * @param {import('readline').Interface} args.inputManager
+   * @param {import("./game.type").Game} args.gameSource
+   */
+  constructor(args) {
+    this.#game = args.gameSource;
+    this.#inputManager = args.inputManager;
+  }
+
+  start() {
+    this.emit("showMessage", {
+      message: this.#game.introText,
+    });
+
+    this.#inputManager.prompt();
+    this.#inputManager.on("line", (answer) => this.loop(answer));
+    this.#inputManager.on("close", () => {
+      this.quit();
+    });
+  }
+
+  /**
+   *
+   * @template {keyof import("./game-event.type.js").GameEvent} T
+   * @param {T} event
+   * @param {import("./game-event.type.js").GameEvent[T]} handler
+   */
+  on(event, handler) {
+    this.#emitter.on(event, handler);
+  }
+
+  /**
+   * @template {keyof import("./game-event.type.js").GameEvent} T
+   * @param {T} event
+   * @param {Parameters<import("./game-event.type.js").GameEvent[T]>[0]} data
+   */
+  emit(event, data) {
+    this.#emitter.emit(event, data);
+  }
+
+  /**
+   *
+   * @param {import('./expression.type').Expression | import('./expression.type').Expression[]} expressions
+   */
+  processCommand(expressions) {
+    const boxed = Array.isArray(expressions) ? expressions : [expressions];
+
+    return boxed.every((expression) =>
+      processExpression(this.#game, expression),
+    );
+  }
+
+  /**
+   * Game loop
+   * @param {string} answer
+   */
+  loop(answer) {
+    const [command, ...rest] = parseInput(answer);
+
+    switch (command) {
+      case "drop": {
+        const itemName = rest.join(" ");
+        const success = this.processCommand({
+          command: "playerDropItem",
+          args: {
+            objectId: itemName,
+          },
+        });
+
+        if (success) {
+          this.emit("showMessage", {
+            message: `Dropped ${itemName}`,
+          });
+        } else {
+          this.emit("showMessage", {
+            message: `You are not carrying ${itemName}`,
+          });
+        }
+
+        break;
+      }
+
+      case "look": {
+        this.emit("showMessage", {
+          message: look(this.#game),
+        });
+
+        break;
+      }
+
+      case "inventory": {
+        this.emit("showMessage", {
+          message: describeInventory(this.#game),
+        });
+
+        break;
+      }
+
+      case "go": {
+        const direction = rest.join(" ");
+        const exit = getRoomExit(
+          this.#game,
+          this.#game.player.currentRoomId,
+          direction,
+        );
+
+        if (!exit) {
+          this.emit("showMessage", {
+            message: `Cannot go ${direction}`,
+          });
+
+          break;
+        }
+
+        this.processCommand(exit.commands.go);
+        break;
+      }
+
+      case "pickup": {
+        const item = rest.join(" ");
+
+        const currentRoom = this.#game.rooms.find(
+          (room) => room.id === this.#game.player.currentRoomId,
+        );
+
+        if (currentRoom == null) {
+          this.emit("warning", {
+            message: `room ${
+              this.#game.player.currentRoomId
+            } not found in game`,
+          });
+
+          break;
+        }
+
+        const object = currentRoom.objects.find(
+          (object) => object.name.toLowerCase() === item,
+        );
+
+        if (object == null) {
+          this.emit("showMessage", {
+            message: `${item} is not in the room.`,
+          });
+
+          break;
+        }
+
+        this.processCommand(object.commands.pickup);
+        break;
+      }
+
+      case "q":
+      case "quit":
+        this.#inputManager.close();
+        break;
+
+      case "":
+        this.emit("showMessage", {
+          message: 'Enter a command. Type "help" for more information',
+        });
+        break;
+    }
+
+    this.#inputManager.prompt();
+  }
+
+  isGameOver() {}
+
+  quit() {
+    this.emit("showMessage", {
+      message: "Quitting game\n",
+    });
+
+    process.exit(0);
+  }
+}
+
 /**
  * Engine factory
  * @param {Object} args
@@ -89,15 +281,40 @@ const describeInventory = (game) => {
  * @param {import("./game.type").Game} args.gameSource
  */
 export const createEngine = ({ inputManager, gameSource: game }) => {
+  const emitter = mitt();
+
   return {
-    emitter: new EventEmitter(),
+    game,
 
     start() {
+      this.emit("showMessage", {
+        message: game.introText,
+      });
+
       inputManager.prompt();
       inputManager.on("line", (answer) => this.loop(answer));
       inputManager.on("close", () => {
         this.quit();
       });
+    },
+
+    /**
+     *
+     * @template {keyof import("./game-event.type.js").GameEvent} T
+     * @param {T} event
+     * @param {import("./game-event.type.js").GameEvent[T]} handler
+     */
+    on(event, handler) {
+      emitter.on(event, handler);
+    },
+
+    /**
+     * @template {keyof import("./game-event.type.js").GameEvent} T
+     * @param {T} event
+     * @param {Parameters<import("./game-event.type.js").GameEvent[T]>[0]} data
+     */
+    emit(event, data) {
+      emitter.emit(event, data);
     },
 
     /**
@@ -128,22 +345,31 @@ export const createEngine = ({ inputManager, gameSource: game }) => {
           });
 
           if (success) {
-            console.log(`Dropped ${itemName}`);
+            this.emit("showMessage", {
+              message: `Dropped ${itemName}`,
+            });
           } else {
-            console.log(`You are not carrying ${itemName}`);
+            this.emit("showMessage", {
+              message: `You are not carrying ${itemName}`,
+            });
           }
 
           break;
         }
 
         case "look": {
-          console.log(look(game));
+          this.emit("showMessage", {
+            message: look(game),
+          });
 
           break;
         }
 
         case "inventory": {
-          console.log(describeInventory(game));
+          this.emit("showMessage", {
+            message: describeInventory(game),
+          });
+
           break;
         }
 
@@ -152,10 +378,10 @@ export const createEngine = ({ inputManager, gameSource: game }) => {
           const exit = getRoomExit(game, game.player.currentRoomId, direction);
 
           if (!exit) {
-            // console.log(`Cannot go ${direction}`);
-            this.emitter.emit("event", {
-              message: `cannot go ${direction}`,
+            this.emit("showMessage", {
+              message: `Cannot go ${direction}`,
             });
+
             break;
           }
 
@@ -171,7 +397,9 @@ export const createEngine = ({ inputManager, gameSource: game }) => {
           );
 
           if (currentRoom == null) {
-            console.warn("room not found!");
+            this.emit("warning", {
+              message: `room ${game.player.currentRoomId} not found in game`,
+            });
 
             break;
           }
@@ -181,7 +409,9 @@ export const createEngine = ({ inputManager, gameSource: game }) => {
           );
 
           if (object == null) {
-            console.log(`${item} is not in the room.`);
+            this.emit("showMessage", {
+              message: `${item} is not in the room.`,
+            });
 
             break;
           }
@@ -196,7 +426,9 @@ export const createEngine = ({ inputManager, gameSource: game }) => {
           break;
 
         case "":
-          console.log('Enter a command. Type "help" for more information');
+          this.emit("showMessage", {
+            message: 'Enter a command. Type "help" for more information',
+          });
           break;
       }
 
@@ -206,7 +438,10 @@ export const createEngine = ({ inputManager, gameSource: game }) => {
     isGameOver() {},
 
     quit() {
-      console.log("Quitting game\n");
+      this.emit("showMessage", {
+        message: "Quitting game\n",
+      });
+
       process.exit(0);
     },
   };

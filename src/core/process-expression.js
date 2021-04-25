@@ -11,15 +11,16 @@ import { roomUpdateObjectRoomDescription } from "./functions/room-update-object-
 
 /**
  *
- * @param {import("./game.type").Game} game
+ * @param {import("./game.type.js").Game} game
  * @param {import("./expression.type").Expression} expression
- * @returns {boolean}
+ * @returns {boolean | import("./game-event.type.js").GameEvent[]}
  */
 export const processExpression = (game, expression) => {
   try {
     if (expression.command === "if") {
       const result = expression.if.reduce(
-        (res, ifExpression) => res && processExpression(game, ifExpression),
+        (res, ifExpression) =>
+          res && processExpression(game, ifExpression) !== false,
         true,
       );
 
@@ -59,7 +60,7 @@ export const processExpression = (game, expression) => {
     if (expression.command === "unless") {
       const result = expression.unless.reduce(
         (res, unlessExpression) =>
-          res && processExpression(game, unlessExpression),
+          res && processExpression(game, unlessExpression) !== false,
         true,
       );
 
@@ -97,8 +98,6 @@ export const processExpression = (game, expression) => {
     }
 
     if (expression.command === "showMessage") {
-      console.log(expression.args);
-
       return true;
     }
 

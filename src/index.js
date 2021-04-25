@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline";
-import { createEngine } from "./core/engine.js";
+import { Engine } from "./core/engine.js";
 import { game } from "./games/dungeon.js";
 
 const rl = createInterface({
@@ -8,8 +8,10 @@ const rl = createInterface({
   prompt: "What do you want to do? ",
 });
 
-const engine = createEngine({ inputManager: rl, gameSource: game });
+const engine = new Engine({ inputManager: rl, gameSource: game });
 
-engine.emitter.on("event", (args) => console.log(args));
+engine.on("showMessage", (data) => {
+  console.log(data?.message);
+});
 
 engine.start();
