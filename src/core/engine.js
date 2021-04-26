@@ -120,18 +120,18 @@ export class Engine {
 
   /**
    *
-   * @template {keyof import("./game-event.type.js").GameEvent} T
+   * @template {keyof import("./game-event.type.js").GameEventMap} T
    * @param {T} event
-   * @param {import("./game-event.type.js").GameEvent[T]} handler
+   * @param {import("./game-event.type.js").GameEventMap[T]} handler
    */
   on(event, handler) {
     this.#emitter.on(event, handler);
   }
 
   /**
-   * @template {keyof import("./game-event.type.js").GameEvent} T
+   * @template {keyof import("./game-event.type.js").GameEventMap} T
    * @param {T} event
-   * @param {Parameters<import("./game-event.type.js").GameEvent[T]>[0]} data
+   * @param {Parameters<import("./game-event.type.js").GameEventMap[T]>[0]} data
    */
   emit(event, data) {
     this.#emitter.emit(event, data);
@@ -300,18 +300,18 @@ export const createEngine = ({ inputManager, gameSource: game }) => {
 
     /**
      *
-     * @template {keyof import("./game-event.type.js").GameEvent} T
+     * @template {keyof import("./game-event.type.js").GameEventMap} T
      * @param {T} event
-     * @param {import("./game-event.type.js").GameEvent[T]} handler
+     * @param {import("./game-event.type.js").GameEventMap[T]} handler
      */
     on(event, handler) {
       emitter.on(event, handler);
     },
 
     /**
-     * @template {keyof import("./game-event.type.js").GameEvent} T
+     * @template {keyof import("./game-event.type.js").GameEventMap} T
      * @param {T} event
-     * @param {Parameters<import("./game-event.type.js").GameEvent[T]>[0]} data
+     * @param {Parameters<import("./game-event.type.js").GameEventMap[T]>[0]} data
      */
     emit(event, data) {
       emitter.emit(event, data);
