@@ -4,6 +4,7 @@ import { playerHasItems } from "./player-has-items.js";
  *
  * @param {import("../game.type.js").Game} game
  * @param {import("../expression.type.js").PlayerTransferInventoryItemsToObject['args']} args
+ * @returns {[boolean, import("../game-event.type.js").GameEvent[]]}
  */
 export const playerTransferInventoryItemsToObject = (game, args) => {
   const roomId = args.roomId.trim().toLowerCase();
@@ -11,20 +12,33 @@ export const playerTransferInventoryItemsToObject = (game, args) => {
 
   const room = game.rooms.find((room) => room.id === roomId);
 
-  // TODO handle error
-  if (room == null) {
-    console.warn(`room ${roomId} not found`);
+  /**
+   * @type {import("../game-event.type.js").GameEvent[]}
+   */
+  const events = [];
 
-    return false;
+  if (room == null) {
+    events.push([
+      "warning",
+      {
+        message: `room ${roomId} not found`,
+      },
+    ]);
+
+    return [false, events];
   }
 
   const roomObject = room.objects.find((object) => object.id === roomObjectId);
 
-  // TODO handle error
   if (roomObject == null) {
-    console.warn(`room object ${roomObject} not found`);
+    events.push([
+      "warning",
+      {
+        message: `room object ${roomObject} not found`,
+      },
+    ]);
 
-    return false;
+    return [false, events];
   }
 
   const playerHasAllItems = playerHasItems(
@@ -33,9 +47,14 @@ export const playerTransferInventoryItemsToObject = (game, args) => {
   );
 
   if (!playerHasAllItems) {
-    console.warn("Player does not have all items");
+    events.push([
+      "warning",
+      {
+        message: "Player does not have all items",
+      },
+    ]);
 
-    return false;
+    return [false, events];
   }
 
   for (const objectId of args.inventoryItemIds) {
@@ -50,5 +69,5 @@ export const playerTransferInventoryItemsToObject = (game, args) => {
     roomObject.objects.push(object);
   }
 
-  return true;
+  return [true, events];
 };

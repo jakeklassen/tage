@@ -2,6 +2,7 @@
  *
  * @param {import("../game.type").Game} game
  * @param {import("../expression.type").PlayerDropItem['args']} args
+ * @returns {[boolean, import("../game-event.type.js").GameEvent[]]}
  */
 export const playerDropItem = (game, args) => {
   const objectId = args.objectId.trim().toLowerCase();
@@ -10,16 +11,31 @@ export const playerDropItem = (game, args) => {
     (room) => room.id === game.player.currentRoomId,
   );
 
-  if (object == null) {
-    console.warn(`${objectId} not in inventory`);
+  /**
+   * @type {import("../game-event.type.js").GameEvent[]}
+   */
+  const events = [];
 
-    return false;
+  if (object == null) {
+    events.push([
+      "showMessage",
+      {
+        message: `You are not carrying ${objectId}`,
+      },
+    ]);
+
+    return [false, events];
   }
 
   if (currentRoom == null) {
-    console.warn("Possible bug, player is not in a room....");
+    events.push([
+      "warning",
+      {
+        message: `Possible bug, player current room ${game.player.currentRoomId} not found`,
+      },
+    ]);
 
-    return false;
+    return [false, events];
   }
 
   game.player.inventory = game.player.inventory.filter(
@@ -28,5 +44,5 @@ export const playerDropItem = (game, args) => {
 
   currentRoom.objects.push(object);
 
-  return true;
+  return [true, events];
 };

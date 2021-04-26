@@ -2,6 +2,7 @@
  *
  * @param {import("../game.type").Game} game
  * @param {import("../expression.type").PlayerPickupItem['args']} args
+ * @returns {[boolean, import("../game-event.type.js").GameEvent[]]}
  */
 export const playerPickupItem = (game, args) => {
   const roomId = args.roomId.trim().toLowerCase();
@@ -9,24 +10,39 @@ export const playerPickupItem = (game, args) => {
 
   const room = game.rooms.find((room) => room.id === roomId);
 
-  // TODO handle error
+  /**
+   * @type {import("../game-event.type.js").GameEvent[]}
+   */
+  const events = [];
+
   if (room == null) {
-    console.warn(`room ${roomId} not found`);
+    events.push([
+      "warning",
+      {
+        message: `room ${roomId} not found`,
+      },
+    ]);
 
-    return false;
+    return [false, events];
   }
 
-  const item = room.objects.find((object) => object.id === objectId);
+  const itemIdx = room.objects.findIndex((object) => object.id === objectId);
 
-  // TODO handle error
-  if (item == null) {
-    console.warn(`item ${objectId} not found`);
+  if (itemIdx === -1) {
+    events.push([
+      "warning",
+      {
+        message: `item ${objectId} not found`,
+      },
+    ]);
 
-    return false;
+    return [false, events];
   }
 
+  const item = room.objects[itemIdx];
   game.player.inventory.push(item);
-  room.objects = room.objects.filter((object) => object.id !== objectId);
 
-  return true;
+  room.objects = room.objects.filter((object, idx) => idx !== itemIdx);
+
+  return [true, events];
 };

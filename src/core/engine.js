@@ -1,4 +1,5 @@
 import mitt from "mitt";
+import { playerHasItems } from "./functions/player-has-items.js";
 import { processExpression } from "./process-expression.js";
 
 const parseInput = (line = "") => {
@@ -37,6 +38,44 @@ const getRoomExit = (game, roomId, direction) => {
 
   return exit;
 };
+
+/**
+ *
+ * @param {import("./game.type").Game} game
+ * @param {string} objectId
+ * @returns {import("./expression.type").Expression[]}
+ */
+function examineObject(game, objectId) {
+  const name = objectId.trim().toLowerCase();
+
+  const object = game.rooms
+    .find((room) => room.id === game.player.currentRoomId)
+    ?.objects.find((object) => object.id === objectId);
+
+  if (object == null) {
+    return [
+      {
+        command: "showMessage",
+        args: {
+          message: `Cannot find ${name} in room.`,
+        },
+      },
+    ];
+  }
+
+  if (object.commands.examine == null) {
+    return [
+      {
+        command: "showMessage",
+        args: {
+          message: object.roomDescription,
+        },
+      },
+    ];
+  }
+
+  return object.commands.examine;
+}
 
 /**
  *
@@ -144,9 +183,15 @@ export class Engine {
   processCommand(expressions) {
     const boxed = Array.isArray(expressions) ? expressions : [expressions];
 
-    return boxed.every((expression) =>
-      processExpression(this.#game, expression),
+    const events = boxed.reduce(
+      (allEvents, expression) =>
+        allEvents.concat(processExpression(this.#game, expression)[1]),
+      /** @type {import("./game-event.type.js").GameEvent[]}  */ ([]),
     );
+
+    for (const [event, data] of events) {
+      this.emit(event, data);
+    }
   }
 
   /**
@@ -159,22 +204,13 @@ export class Engine {
     switch (command) {
       case "drop": {
         const itemName = rest.join(" ");
-        const success = this.processCommand({
+
+        this.processCommand({
           command: "playerDropItem",
           args: {
             objectId: itemName,
           },
         });
-
-        if (success) {
-          this.emit("showMessage", {
-            message: `Dropped ${itemName}`,
-          });
-        } else {
-          this.emit("showMessage", {
-            message: `You are not carrying ${itemName}`,
-          });
-        }
 
         break;
       }
@@ -205,13 +241,21 @@ export class Engine {
 
         if (!exit) {
           this.emit("showMessage", {
-            message: `Cannot go ${direction}`,
+            message: `\nCannot go ${direction}\n`,
           });
 
           break;
         }
 
         this.processCommand(exit.commands.go);
+        break;
+      }
+
+      case "examine": {
+        const objectId = rest.join(" ");
+        const examineCommand = examineObject(this.#game, objectId);
+        this.processCommand(examineCommand);
+
         break;
       }
 
@@ -248,16 +292,69 @@ export class Engine {
         break;
       }
 
+      case "use": {
+        const [itemName, targetObjectName] = rest
+          .join(" ")
+          .split("on")
+          .map((words) => words.trim());
+
+        const [playerHasItem] = playerHasItems(this.#game.player, [
+          { objectId: itemName },
+        ]);
+
+        if (playerHasItem === false) {
+          this.emit("showMessage", {
+            message: `You don't have ${itemName}`,
+          });
+
+          break;
+        }
+
+        const target = this.#game.rooms
+          .find((room) => room.id === this.#game.player.currentRoomId)
+          ?.objects.find((object) => object.id === targetObjectName);
+
+        if (!target) {
+          this.emit("showMessage", {
+            message: `Cound not find ${targetObjectName} in room.`,
+          });
+
+          break;
+        }
+
+        if (!target.commands.use) {
+          this.emit("showMessage", {
+            message: `Cannot use ${itemName} on ${targetObjectName}.`,
+          });
+
+          break;
+        }
+
+        this.#game.player.lastItemUsedId = itemName;
+
+        this.processCommand(target.commands.use);
+
+        break;
+      }
+
       case "q":
       case "quit":
         this.#inputManager.close();
         break;
 
-      case "":
+      case "": {
         this.emit("showMessage", {
           message: 'Enter a command. Type "help" for more information',
         });
+
         break;
+      }
+
+      default: {
+        this.emit("showMessage", {
+          message: `\nUnrecognized command '${command}'\n`,
+        });
+      }
     }
 
     this.#inputManager.prompt();
@@ -273,176 +370,3 @@ export class Engine {
     process.exit(0);
   }
 }
-
-/**
- * Engine factory
- * @param {Object} args
- * @param {import('readline').Interface} args.inputManager
- * @param {import("./game.type").Game} args.gameSource
- */
-export const createEngine = ({ inputManager, gameSource: game }) => {
-  const emitter = mitt();
-
-  return {
-    game,
-
-    start() {
-      this.emit("showMessage", {
-        message: game.introText,
-      });
-
-      inputManager.prompt();
-      inputManager.on("line", (answer) => this.loop(answer));
-      inputManager.on("close", () => {
-        this.quit();
-      });
-    },
-
-    /**
-     *
-     * @template {keyof import("./game-event.type.js").GameEventMap} T
-     * @param {T} event
-     * @param {import("./game-event.type.js").GameEventMap[T]} handler
-     */
-    on(event, handler) {
-      emitter.on(event, handler);
-    },
-
-    /**
-     * @template {keyof import("./game-event.type.js").GameEventMap} T
-     * @param {T} event
-     * @param {Parameters<import("./game-event.type.js").GameEventMap[T]>[0]} data
-     */
-    emit(event, data) {
-      emitter.emit(event, data);
-    },
-
-    /**
-     *
-     * @param {import('./expression.type').Expression | import('./expression.type').Expression[]} expressions
-     */
-    processCommand(expressions) {
-      const boxed = Array.isArray(expressions) ? expressions : [expressions];
-
-      return boxed.every((expression) => processExpression(game, expression));
-    },
-
-    /**
-     * Game loop
-     * @param {string} answer
-     */
-    loop(answer) {
-      const [command, ...rest] = parseInput(answer);
-
-      switch (command) {
-        case "drop": {
-          const itemName = rest.join(" ");
-          const success = this.processCommand({
-            command: "playerDropItem",
-            args: {
-              objectId: itemName,
-            },
-          });
-
-          if (success) {
-            this.emit("showMessage", {
-              message: `Dropped ${itemName}`,
-            });
-          } else {
-            this.emit("showMessage", {
-              message: `You are not carrying ${itemName}`,
-            });
-          }
-
-          break;
-        }
-
-        case "look": {
-          this.emit("showMessage", {
-            message: look(game),
-          });
-
-          break;
-        }
-
-        case "inventory": {
-          this.emit("showMessage", {
-            message: describeInventory(game),
-          });
-
-          break;
-        }
-
-        case "go": {
-          const direction = rest.join(" ");
-          const exit = getRoomExit(game, game.player.currentRoomId, direction);
-
-          if (!exit) {
-            this.emit("showMessage", {
-              message: `Cannot go ${direction}`,
-            });
-
-            break;
-          }
-
-          this.processCommand(exit.commands.go);
-          break;
-        }
-
-        case "pickup": {
-          const item = rest.join(" ");
-
-          const currentRoom = game.rooms.find(
-            (room) => room.id === game.player.currentRoomId,
-          );
-
-          if (currentRoom == null) {
-            this.emit("warning", {
-              message: `room ${game.player.currentRoomId} not found in game`,
-            });
-
-            break;
-          }
-
-          const object = currentRoom.objects.find(
-            (object) => object.name.toLowerCase() === item,
-          );
-
-          if (object == null) {
-            this.emit("showMessage", {
-              message: `${item} is not in the room.`,
-            });
-
-            break;
-          }
-
-          this.processCommand(object.commands.pickup);
-          break;
-        }
-
-        case "q":
-        case "quit":
-          inputManager.close();
-          break;
-
-        case "":
-          this.emit("showMessage", {
-            message: 'Enter a command. Type "help" for more information',
-          });
-          break;
-      }
-
-      inputManager.prompt();
-    },
-
-    isGameOver() {},
-
-    quit() {
-      this.emit("showMessage", {
-        message: "Quitting game\n",
-      });
-
-      process.exit(0);
-    },
-  };
-};
