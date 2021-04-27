@@ -2,6 +2,20 @@ import mitt from "mitt";
 import { playerHasItems } from "./functions/player-has-items.js";
 import { processExpression } from "./process-expression.js";
 
+const HELP_TEXT = `Commands:
+
+ - drop: Drop an item from inventory
+ - interact: COMING SOON!
+ - examine: Examine an object in the room
+ - go: Go direction. North, East, South and West are valid
+ - help: Show commands
+ - inventory: Show inventory
+ - look: Look around the room
+ - pickup: Try to pickup object in the room
+ - use: Attempt to use an item from inventory on an object in the room
+ - q/quit: Quit game
+`;
+
 const parseInput = (line = "") => {
   const [command, ...args] = line
     .split(" ")
@@ -206,9 +220,25 @@ export class Engine {
    * @param {string} answer
    */
   loop(answer) {
-    const [command, ...rest] = parseInput(answer);
+    const [command = "", ...rest] = parseInput(answer);
 
     switch (command) {
+      case "help": {
+        this.emit("showMessage", {
+          message: HELP_TEXT,
+        });
+
+        break;
+      }
+
+      case "interact": {
+        this.emit("showMessage", {
+          message: "COMING SOON!",
+        });
+
+        break;
+      }
+
       case "drop": {
         const itemName = rest.join(" ");
 

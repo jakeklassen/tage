@@ -287,8 +287,7 @@ export const game = {
                   {
                     command: "showMessage",
                     args: {
-                      message:
-                        "A ${rooms.boss_room.objects.minotaur.name} is blocking your path!",
+                      message: "A minotaur is blocking your path!",
                     },
                   },
                 ],
