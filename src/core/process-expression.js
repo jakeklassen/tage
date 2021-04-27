@@ -13,101 +13,137 @@ import { roomUpdateObjectRoomDescription } from "./functions/room-update-object-
 /**
  *
  * @param {import("./game.type.js").Game} game
+ * @param {import("./expression.type").Condition} condition
+ * @returns {import("./game-function.type.js").GameFunctionReturnType}
+ */
+const processCondition = (game, condition) => {
+  if (condition.command === "if") {
+    const [ifSuccess, ifEvents] = condition.if.reduce((results, expression) => {
+      const [expressionSuccess, expressionEvents] = processExpression(
+        game,
+        expression,
+      );
+
+      results[0] &&= expressionSuccess;
+      results[1].push(...expressionEvents);
+
+      return results;
+    }, /** @type {[boolean, import("./game-event.type.js").GameEvent[]]} */ ([true, []]));
+
+    if (ifSuccess) {
+      if (Array.isArray(condition.then)) {
+        return condition.then.reduce((results, expression) => {
+          const [expressionSuccess, expressionEvents] = processExpression(
+            game,
+            expression,
+          );
+
+          results[0] &&= expressionSuccess;
+          results[1].push(...expressionEvents);
+
+          return results;
+        }, /** @type {[boolean, import("./game-event.type.js").GameEvent[]]} */ ([true, ifEvents]));
+      }
+
+      const thenCondition = processCondition(game, condition.then);
+      thenCondition[1].push(...ifEvents);
+
+      return thenCondition;
+    } else if (condition.else != null) {
+      if (Array.isArray(condition.else)) {
+        return condition.else.reduce((results, expression) => {
+          const [expressionSuccess, expressionEvents] = processExpression(
+            game,
+            expression,
+          );
+
+          results[0] &&= expressionSuccess;
+          results[1].push(...expressionEvents);
+
+          return results;
+        }, /** @type {[boolean, import("./game-event.type.js").GameEvent[]]} */ ([true, ifEvents]));
+      }
+
+      const elseCondition = processCondition(game, condition.else);
+      elseCondition[1].push(...ifEvents);
+
+      return elseCondition;
+    } else {
+      return [ifSuccess, ifEvents];
+    }
+  } else {
+    const [unlessSuccess, unlessEvents] = condition.unless.reduce(
+      (results, expression) => {
+        const [expressionSuccess, expressionEvents] = processExpression(
+          game,
+          expression,
+        );
+
+        results[0] &&= expressionSuccess;
+        results[1].push(...expressionEvents);
+
+        return results;
+      },
+      /** @type {[boolean, import("./game-event.type.js").GameEvent[]]} */ ([
+        true,
+        [],
+      ]),
+    );
+
+    if (unlessSuccess === false) {
+      if (Array.isArray(condition.then)) {
+        return condition.then.reduce((results, expression) => {
+          const [expressionSuccess, expressionEvents] = processExpression(
+            game,
+            expression,
+          );
+
+          results[0] &&= expressionSuccess;
+          results[1].push(...expressionEvents);
+
+          return results;
+        }, /** @type {[boolean, import("./game-event.type.js").GameEvent[]]} */ ([true, unlessEvents]));
+      } else {
+        const thenCondition = processCondition(game, condition.then);
+        thenCondition[1].push(...unlessEvents);
+
+        return thenCondition;
+      }
+    } else if (condition.else != null) {
+      if (Array.isArray(condition.else)) {
+        return condition.else.reduce((results, expression) => {
+          const [expressionSuccess, expressionEvents] = processExpression(
+            game,
+            expression,
+          );
+
+          results[0] &&= expressionSuccess;
+          results[1].push(...expressionEvents);
+
+          return results;
+        }, /** @type {[boolean, import("./game-event.type.js").GameEvent[]]} */ ([true, unlessEvents]));
+      } else {
+        const elseCondition = processCondition(game, condition.else);
+        elseCondition[1].push(...unlessEvents);
+
+        return elseCondition;
+      }
+    } else {
+      return [unlessSuccess, unlessEvents];
+    }
+  }
+};
+
+/**
+ *
+ * @param {import("./game.type.js").Game} game
  * @param {import("./expression.type").Expression} expression
  * @returns {[boolean, import("./game-event.type.js").GameEvent[]]}
  */
 export const processExpression = (game, expression) => {
   try {
-    if (expression.command === "if") {
-      const result = expression.if.reduce(
-        (res, ifExpression) =>
-          res && processExpression(game, ifExpression)[0] !== false,
-        true,
-      );
-
-      if (result) {
-        if (Array.isArray(expression.then)) {
-          return [
-            expression.then.reduce(
-              (res, thenExpression) =>
-                res && Array.isArray(thenExpression)
-                  ? thenExpression.reduce(
-                      (thenRes, thenThenExpression) =>
-                        thenRes && thenThenExpression,
-                      true,
-                    )
-                  : processExpression(game, thenExpression),
-              true,
-            ),
-            [],
-          ];
-        }
-      }
-
-      if (expression.else) {
-        if (Array.isArray(expression.else)) {
-          return [
-            expression.else.reduce(
-              (res, elseExpression) =>
-                res && Array.isArray(elseExpression)
-                  ? elseExpression.reduce(
-                      (elseRes, elseElseExpression) =>
-                        elseRes && elseElseExpression,
-                      true,
-                    )
-                  : processExpression(game, elseExpression),
-              true,
-            ),
-            [],
-          ];
-        }
-      }
-    }
-
-    if (expression.command === "unless") {
-      const result = expression.unless.reduce(
-        (res, unlessExpression) =>
-          res && processExpression(game, unlessExpression)[0] !== false,
-        true,
-      );
-
-      if (result === false) {
-        if (Array.isArray(expression.else)) {
-          return [
-            expression.else.reduce(
-              (res, elseExpression) =>
-                res && Array.isArray(elseExpression)
-                  ? elseExpression.reduce(
-                      (elseRes, elseElseExpression) =>
-                        elseRes && elseElseExpression,
-                      true,
-                    )
-                  : processExpression(game, elseExpression)[0],
-              true,
-            ),
-            [],
-          ];
-        }
-      }
-
-      if (expression.else) {
-        if (Array.isArray(expression.else)) {
-          return [
-            expression.else.reduce(
-              (res, elseExpression) =>
-                res && Array.isArray(elseExpression)
-                  ? elseExpression.reduce(
-                      (elseRes, elseElseExpression) =>
-                        elseRes && elseElseExpression,
-                      true,
-                    )
-                  : processExpression(game, elseExpression)[0],
-              true,
-            ),
-            [],
-          ];
-        }
-      }
+    if (expression.command === "if" || expression.command == "unless") {
+      return processCondition(game, expression);
     }
 
     if (expression.command === "showMessage") {

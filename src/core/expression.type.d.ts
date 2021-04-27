@@ -108,7 +108,7 @@ type Unless = {
   else?: Expression[] | Condition;
 };
 
-type Condition = If | Unless;
+export type Condition = If | Unless;
 
 export type Expression =
   | Condition

@@ -183,15 +183,22 @@ export class Engine {
   processCommand(expressions) {
     const boxed = Array.isArray(expressions) ? expressions : [expressions];
 
-    const events = boxed.reduce(
-      (allEvents, expression) =>
-        allEvents.concat(processExpression(this.#game, expression)[1]),
-      /** @type {import("./game-event.type.js").GameEvent[]}  */ ([]),
-    );
+    const [expressionResult, events] = boxed.reduce((results, expression) => {
+      const [expressionResult, expressionEvents] = processExpression(
+        this.#game,
+        expression,
+      );
+      results[0] &&= expressionResult;
+      results[1].push(...expressionEvents);
+
+      return results;
+    }, /** @type {[boolean, import("./game-event.type.js").GameEvent[]]}  */ ([true, []]));
 
     for (const [event, data] of events) {
       this.emit(event, data);
     }
+
+    return expressionResult;
   }
 
   /**
@@ -357,10 +364,19 @@ export class Engine {
       }
     }
 
+    if (this.isGameOver()) {
+      this.emit("showMessage", {
+        message: this.#game.youWinText,
+      });
+      this.quit();
+    }
+
     this.#inputManager.prompt();
   }
 
-  isGameOver() {}
+  isGameOver() {
+    return this.processCommand(this.#game.winConditions);
+  }
 
   quit() {
     this.emit("showMessage", {

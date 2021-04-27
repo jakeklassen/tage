@@ -312,5 +312,51 @@ export const game = {
         },
       ],
     },
+
+    {
+      id: "treasure_room",
+      name: "Treasure Room",
+      description: "Imma gonna get rich today $.$",
+      objects: [
+        {
+          id: "southern_exit",
+          name: "Southern Exit",
+          roomDescription: "A Southern exit back to Da Boss Room.",
+          objects: [],
+          commands: {
+            go: [
+              {
+                command: "playerChangeRoom",
+                args: {
+                  roomId: "boss_room",
+                },
+              },
+            ],
+          },
+        },
+        {
+          id: "treasure",
+          name: "Treasure",
+          roomDescription: "A pile of treasure!",
+          inventoryDescription: "A pile of treasure!",
+          objects: [],
+          commands: {
+            pickup: [
+              {
+                command: "playerPickupItem",
+                args: {
+                  roomId: "treasure_room",
+                  objectId: "treasure",
+                },
+              },
+              {
+                command: "showMessage",
+                args: { message: "That's some shiny loot" },
+              },
+            ],
+          },
+        },
+      ],
+    },
   ],
 };
